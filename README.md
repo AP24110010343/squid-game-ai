@@ -26,3 +26,4 @@ AI-powered Red Light Green Light game using YOLO, OpenCV, and MediaPipe.
 ```bash
 pip install -r requirements.txt
 python3 squid_game_pointer.py
+```
