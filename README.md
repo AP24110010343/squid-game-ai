@@ -1,2 +1,28 @@
-# squid-game-ai
-A real-time computer vision recreation of Squid Game's Red Light Green Light challenge. Features multi-player human detection, motion-based elimination, advanced anti-duplicate tracking, YOLO/MediaPipe support, multiple difficulty modes, live scoring, and interactive camera-based gameplay
+# Squid Game AI
+
+AI-powered Red Light Green Light game using YOLO, OpenCV, and MediaPipe.
+
+## Features
+
+- Real-time human detection
+- Red Light / Green Light gameplay
+- Multi-player tracking
+- Anti-duplicate tracking system
+- Motion detection during Red Light
+- Sound effects
+- Multiple difficulty modes
+- Hand gesture menu navigation
+
+## Tech Stack
+
+- Python
+- OpenCV
+- YOLOv8
+- MediaPipe
+- NumPy
+
+## Installation
+
+```bash
+pip install -r requirements.txt
+python3 squid_game_pointer.py
