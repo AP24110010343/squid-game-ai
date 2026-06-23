@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 squid_game_pointer.py — PINCH-POINTER + ANTI-DUPLICATE FIXES
 
