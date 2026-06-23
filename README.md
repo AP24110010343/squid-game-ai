@@ -9,6 +9,9 @@ AI-powered Red Light Green Light game using YOLO, OpenCV, and MediaPipe.
 
 <img width="1046" height="590" alt="Screenshot 2026-06-24 at 1 11 46 AM" src="https://github.com/user-attachments/assets/74ce7bc0-592d-4c73-b6bc-a44d21648d41" />
 
+<img width="1072" height="680" alt="image" src="https://github.com/user-attachments/assets/a679dfbe-b3bd-4504-bd0b-1242ffd5bd7e" />
+
+
 <img width="1046" height="590" alt="Screenshot 2026-06-24 at 12 53 42 AM" src="https://github.com/user-attachments/assets/d6136e22-0fb8-40eb-9b52-74f9f74e0ac4" />
 
 
