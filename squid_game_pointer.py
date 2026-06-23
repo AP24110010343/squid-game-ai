@@ -1,21 +1,3 @@
-#!/usr/bin/env python3
-"""
-squid_game_pointer.py — PINCH-POINTER + ANTI-DUPLICATE FIXES
-
-Hand Controls:
-  • Index finger controls a rotating pointer arrow on screen
-  • Pinch (thumb touches index) = CLICK to select buttons
-  • Pointer arrow rotates following your finger direction
-
-Anti-Duplicate Fixes:
-  • NMS on raw detections eliminates overlapping boxes
-  • Spawn guard prevents new tracker near existing ones
-  • Provisional period: new trackers immune for 1s
-  • Movement buffer: need 3/6 frames of movement to eliminate
-  • IoU-based merge catches overlapping trackers
-  • Eliminated trackers absorb nearby detections (wider radius)
-"""
-
 import time, math, random, threading, sys, os, argparse
 import cv2
 import numpy as np
@@ -37,8 +19,7 @@ try:
     _HAS_MP = True
 except Exception:
     mp = None; _HAS_MP = False
-
-# ======================== ARGUMENTS ========================
+  
 parser = argparse.ArgumentParser(description="Squid Game — Red Light Green Light")
 parser.add_argument("--detector", choices=["yolo","mp"], default="yolo")
 parser.add_argument("--model", default="yolov8n.mlpackage")
@@ -48,7 +29,6 @@ parser.add_argument("--mode", choices=["classic","hardcore","training"], default
 parser.add_argument("--no-sound", action="store_true")
 args = parser.parse_args()
 
-# ======================== CONFIG ========================
 DETECTOR   = args.detector
 MODEL_PATH = args.model
 CONF       = 0.35
@@ -73,20 +53,17 @@ CURRENT_MODE="classic"
 RESTART_DELAY=5.0; HEADER_HEIGHT=90
 GREEN_VARIANCE=0.5; RED_VARIANCE=0.6; FREEZE_WARNING_PRE=0.8
 
-# ---- TRACKER TUNING (IMPROVED) ----
 DISAPPEAR_TIMEOUT      = 2.5
 ELIM_DISAPPEAR_TIMEOUT = 8.0
-ASSIGN_DIST_THRESH     = 140   # increased from 120
+ASSIGN_DIST_THRESH     = 140   
 SMOOTH_ALPHA           = 0.38
 BBOX_PAD               = 14
 MIN_ASSIGN_DIST        = 45
-TORSO_SCALE_MATCH      = 1.4   # increased from 1.25
+TORSO_SCALE_MATCH      = 1.4  
 IOU_MATCH_THRESH       = 0.10
 MERGE_DIST_FACTOR      = 0.6
 JUMP_FILTER_THRESH     = 0.12
 ELIM_OVERLAY_ALPHA     = 0.40
-
-# ---- ANTI-DUPLICATE NEW PARAMS ----
 NMS_IOU_THRESH         = 0.45
 SPAWN_GUARD_RATIO      = 0.55
 SPAWN_GUARD_MIN        = 50
@@ -95,8 +72,6 @@ MOVE_HISTORY_SIZE      = 6
 MOVE_CONFIRM_COUNT     = 3
 MERGE_IOU_THRESH       = 0.30
 ELIM_ABSORB_FACTOR     = 1.6
-
-# ---- POINTER CONFIG ----
 PINCH_ON_THRESH   = 0.18
 PINCH_OFF_THRESH  = 0.26
 CLICK_COOLDOWN    = 0.50
@@ -106,7 +81,6 @@ POINTER_SIZE      = 24
 TRAIL_MAX         = 18
 TRAIL_DURATION    = 0.30
 RIPPLE_DURATION   = 0.50
-
 COLORBLIND_MODE = args.colorblind
 FRAME_SKIP      = max(1, args.frameskip)
 SOUND_ENABLED   = _HAS_AUDIO and not args.no_sound
@@ -137,15 +111,11 @@ SOUNDS = {
 }
 for k,p in SOUNDS.items():
     if not os.path.exists(p): print(f"[WARN] Missing: {p}")
-
-# ======================== COLOURS ========================
 def col_green():  return (180,180,0) if COLORBLIND_MODE else (30,200,30)
 def col_red():    return (255,100,0) if COLORBLIND_MODE else (0,0,220)
 def col_warn():   return (0,165,255)
 def col_box_g():  return (180,180,0) if COLORBLIND_MODE else (50,220,50)
 def col_box_r():  return (255,100,0) if COLORBLIND_MODE else (50,50,220)
-
-# ======================== HEADER SHAPES ========================
 SHAPE_TYPES=("triangle","circle","square")
 SHAPES_TOTAL=12; _shapes_line=None
 
@@ -202,8 +172,6 @@ def draw_header(img):
     cv2.putText(img,ml,(10,HEADER_HEIGHT-10),cv2.FONT_HERSHEY_SIMPLEX,0.5,(0,0,0),1,cv2.LINE_AA)
     if COLORBLIND_MODE:
         cv2.putText(img,"[CB]",(w-50,HEADER_HEIGHT-10),cv2.FONT_HERSHEY_SIMPLEX,0.45,(0,0,0),1,cv2.LINE_AA)
-
-# ======================== AUDIO ========================
 class Audio:
     def __init__(self):
         self.bg=None; self._lock=threading.Lock()
@@ -233,8 +201,6 @@ class Audio:
             self.bg=None
 
 audio=Audio()
-
-# ======================== CAMERA / MODEL ========================
 def make_cap():
     if sys.platform.startswith("darwin"):
         return cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
@@ -257,8 +223,6 @@ if DETECTOR=="mp":
     mp_pose=mp.solutions.pose
     pose=mp_pose.Pose(static_image_mode=False,model_complexity=1,
                       min_detection_confidence=0.6,min_tracking_confidence=0.6)
-
-# ---- HAND DETECTOR (always if available) ----
 hands_detector=None
 if _HAS_MP:
     mp_hands=mp.solutions.hands
@@ -277,8 +241,6 @@ for _ in range(6):
     if cv2.waitKey(1)&0xFF==ord('q'):
         cap.release(); cv2.destroyAllWindows(); raise SystemExit(0)
 print("[INFO] Camera ready.")
-
-# ======================== POINTER CONTROLLER ========================
 class PointerController:
     """Pinch-pointer: index finger controls cursor, thumb+index pinch = click."""
 
@@ -321,8 +283,6 @@ class PointerController:
         else:
             self.cx=raw_x; self.cy=raw_y
         self.detected=True
-
-        # Angle from index MCP→TIP
         mcp=lm[5]
         ndx=tip.x-mcp.x; ndy=tip.y-mcp.y
         mag=math.hypot(ndx,ndy)
@@ -333,26 +293,18 @@ class PointerController:
             dm=math.hypot(self.dir_x,self.dir_y)
             if dm>0.001: self.dir_x/=dm; self.dir_y/=dm
         self.angle=math.atan2(self.dir_y,self.dir_x)
-
-        # Thumb & index pixel coords
         self.thumb_x=int(lm[4].x*w); self.thumb_y=int(lm[4].y*h)
         self.index_x=int(lm[8].x*w); self.index_y=int(lm[8].y*h)
-
-        # Pinch distance (normalized by hand size)
         tx=lm[4].x*w; ty=lm[4].y*h
         ix=tip.x*w; iy=tip.y*h
         dist=math.hypot(tx-ix,ty-iy)
         wrist=lm[0]; mid_mcp=lm[9]
         hand_sz=math.hypot((wrist.x-mid_mcp.x)*w,(wrist.y-mid_mcp.y)*h)
         self.pinch_dist=dist/max(1.0,hand_sz)
-
-        # Hysteresis pinch
         if self.pinching:
             if self.pinch_dist>PINCH_OFF_THRESH: self.pinching=False
         else:
             if self.pinch_dist<PINCH_ON_THRESH: self.pinching=True
-
-        # Click rising edge
         now=time.time()
         if self.pinching and not self._was_pinch:
             if now>self._cooldown:
@@ -360,8 +312,6 @@ class PointerController:
                 self._cooldown=now+CLICK_COOLDOWN
                 self.ripples.append((int(self.cx),int(self.cy),now))
         self._was_pinch=self.pinching
-
-        # Trail
         self.trail.append((int(self.cx),int(self.cy),now))
         if len(self.trail)>TRAIL_MAX*2:
             self.trail=self.trail[-TRAIL_MAX:]
@@ -388,16 +338,12 @@ class PointerController:
         """Draw pointer arrow, trail, pinch indicator, ripples."""
         if not self.detected: return
         h,w=img.shape[:2]; now=time.time()
-
-        # ---- Trail ----
         alive=[(x,y,t) for x,y,t in self.trail if now-t<TRAIL_DURATION]
         self.trail[:]=alive
         for x,y,t in alive:
             age=now-t; a=1.0-age/TRAIL_DURATION
             r=max(1,int(3*a))
             cv2.circle(img,(x,y),r,(int(200*a),int(255*a),0),-1,cv2.LINE_AA)
-
-        # ---- Ripples ----
         alive_r=[]
         for rx,ry,rt in self.ripples:
             age=now-rt
@@ -407,28 +353,20 @@ class PointerController:
             tk=max(1,int(3*a))
             cv2.circle(img,(rx,ry),rad,(0,int(255*a),0),tk,cv2.LINE_AA)
         self.ripples[:]=alive_r
-
-        # ---- Pointer arrow ----
         cx=int(self.cx); cy=int(self.cy)
         if self.pinching:      pcol=(0,255,0)
         elif self.hover_btn:   pcol=(0,255,255)
         else:                  pcol=(0,220,255)
-
-        # Arrow tip at cursor, body extends backward
         sz=POINTER_SIZE
         bx=cx-self.dir_x*sz; by=cy-self.dir_y*sz
         wing=sz*0.38; px=-self.dir_y; py=self.dir_x
         left=(int(bx+px*wing),int(by+py*wing))
         right=(int(bx-px*wing),int(by-py*wing))
         pts=np.array([(cx,cy),left,right],np.int32)
-
-        # Glow shadow
         cv2.fillPoly(img,[pts+2],(0,0,0),cv2.LINE_AA)
         cv2.fillPoly(img,[pts],pcol,cv2.LINE_AA)
         cv2.polylines(img,[pts],True,(255,255,255),1,cv2.LINE_AA)
         cv2.circle(img,(cx,cy),3,(255,255,255),-1,cv2.LINE_AA)
-
-        # ---- Pinch line between thumb and index ----
         pd=self.pinch_dist
         line_col=(0,255,0) if self.pinching else (
             (0,int(min(255,255*(1-pd/0.3))),255) if pd<0.3 else (100,100,100))
@@ -437,8 +375,6 @@ class PointerController:
         dot_col=(0,255,0) if self.pinching else (0,180,255)
         cv2.circle(img,(self.thumb_x,self.thumb_y),6,dot_col,-1,cv2.LINE_AA)
         cv2.circle(img,(self.index_x,self.index_y),6,dot_col,-1,cv2.LINE_AA)
-
-        # ---- Pinch progress arc (visual feedback) ----
         if not self.pinching and pd<0.35:
             prog=max(0,1.0-pd/PINCH_ON_THRESH)
             if prog>0:
@@ -447,7 +383,6 @@ class PointerController:
                 arc_col=(0,int(255*prog),255)
                 cv2.ellipse(img,(cx,cy),(arc_r,arc_r),-90,0,angle,arc_col,3,cv2.LINE_AA)
 
-        # ---- Status label ----
         status="PINCH!" if self.pinching else "Point & Pinch"
         scol=(0,255,0) if self.pinching else (180,180,180)
         cv2.putText(img,status,(w-160,h-15),cv2.FONT_HERSHEY_SIMPLEX,0.5,scol,1,cv2.LINE_AA)
@@ -457,7 +392,6 @@ class PointerController:
 
 pointer = PointerController()
 
-# ======================== HOVER BUTTON ========================
 class HoverButton:
     def __init__(self,x,y,w,h,label,value=None):
         self.x=x; self.y=y; self.w=w; self.h=h
@@ -510,7 +444,6 @@ def init_buttons(w,h):
     ]
     _btn_init=True
 
-# ======================== UI HELPERS ========================
 def draw_alert_bar(img,progress):
     h,w=img.shape[:2]; bh=16; m=12
     x1,x2=m,w-m; fl=int((x2-x1)*(1-progress))
@@ -539,7 +472,6 @@ def draw_fps(img,fps):
     cv2.putText(img,f"FPS:{fps:.0f}",(10,img.shape[0]-40),
                 cv2.FONT_HERSHEY_SIMPLEX,0.5,(150,150,150),1,cv2.LINE_AA)
 
-# ======================== PHASE DURATION ========================
 def cur_green(ge):
     t=min(1,ge/GAME_TIME); b=GREEN_MAX-t*(GREEN_MAX-GREEN_MIN)
     return max(GREEN_MIN*0.5,b+random.uniform(-GREEN_VARIANCE,GREEN_VARIANCE))
@@ -550,7 +482,6 @@ def cur_thresh(ge):
     t=min(1,ge/GAME_TIME)
     return TORSO_THRESH_EASY-t*(TORSO_THRESH_EASY-TORSO_THRESH_HARD)
 
-# ======================== POSE HELPERS ========================
 def torso_cen(lm,w,h):
     if DETECTOR!="mp" or mp_pose is None: return None,None
     ids=[mp_pose.PoseLandmark.LEFT_SHOULDER,mp_pose.PoseLandmark.RIGHT_SHOULDER,
@@ -565,7 +496,6 @@ def bbox_lm(lm,w,h):
     return (max(0,min(xs)-BBOX_PAD),max(HEADER_HEIGHT,min(ys)-BBOX_PAD),
             min(w,max(xs)+BBOX_PAD),min(h,max(ys)+BBOX_PAD))
 
-# ======================== TRACKER (IMPROVED) ========================
 trackers={}; next_id=1; player_scores={}
 
 def make_id(i): return f"P{i:03d}"
@@ -582,7 +512,6 @@ def iou(a,b):
 def nms_detections(dets, thresh=NMS_IOU_THRESH):
     """Non-maximum suppression: remove overlapping detections of same person."""
     if not dets: return []
-    # Sort by box area descending (larger = more reliable)
     sd=sorted(dets,key=lambda d:-(d[2][2]-d[2][0])*(d[2][3]-d[2][1]))
     keep=[]
     for d in sd:
@@ -596,7 +525,6 @@ def assign_all(dets):
     now=time.time()
     if not dets: return []
 
-    # Build candidates (priority: 0=living, 1=eliminated)
     cands=[]
     for di,(cx,cy,bb,th) in enumerate(dets):
         for tid,tr in trackers.items():
@@ -613,7 +541,6 @@ def assign_all(dets):
         if di in ad or tid in at: continue
         ad.add(di); at.add(tid); matched.append((di,tid))
 
-    # IoU fallback for unmatched
     for di in [i for i in range(len(dets)) if i not in ad]:
         _,_,bb,_=dets[di]
         best_tid=None; best_iou=IOU_MATCH_THRESH
@@ -625,7 +552,6 @@ def assign_all(dets):
         if best_tid:
             ad.add(di); at.add(best_tid); matched.append((di,best_tid))
 
-    # Update matched
     res=[]
     for di,tid in matched:
         cx,cy,bb,th=dets[di]; tr=trackers[tid]
@@ -642,12 +568,10 @@ def assign_all(dets):
                 tr["prev_cx"]=pcx; tr["prev_cy"]=pcy
         res.append(tid)
 
-    # New trackers — with SPAWN GUARD
     for di in range(len(dets)):
         if di in ad: continue
         cx,cy,bb,th=dets[di]
 
-        # Spawn guard: try force-assign to nearest unmatched tracker
         best_tid=None; best_d=max(SPAWN_GUARD_MIN, th*SPAWN_GUARD_RATIO)
         for tid,tr in trackers.items():
             if tid in at: continue
@@ -655,7 +579,6 @@ def assign_all(dets):
             if d<best_d:
                 best_d=d; best_tid=tid
         if best_tid:
-            # Force-assign to existing tracker instead of creating new
             tr=trackers[best_tid]
             pcx,pcy=tr["smooth_cx"],tr["smooth_cy"]
             tr["smooth_cx"]=SMOOTH_ALPHA*cx+(1-SMOOTH_ALPHA)*pcx
@@ -667,20 +590,17 @@ def assign_all(dets):
             ad.add(di); at.add(best_tid); res.append(best_tid)
             continue
 
-        # Check if near any eliminated tracker — absorb instead
         near_elim=False
         for tid,tr in trackers.items():
             if not tr.get("eliminated"): continue
             d=math.hypot(cx-tr["smooth_cx"],cy-tr["smooth_cy"])
             if d < max(SPAWN_GUARD_MIN*1.5, th*SPAWN_GUARD_RATIO*2):
-                # Update eliminated tracker position, don't create new
                 tr["smooth_cx"]=SMOOTH_ALPHA*cx+(1-SMOOTH_ALPHA)*tr["smooth_cx"]
                 tr["smooth_cy"]=SMOOTH_ALPHA*cy+(1-SMOOTH_ALPHA)*tr["smooth_cy"]
                 tr["bbox"]=bb; tr["last_seen"]=now
                 near_elim=True; res.append(tid); break
         if near_elim: continue
 
-        # Really create new tracker
         pid=make_id(next_id); next_id+=1
         trackers[pid]={"smooth_cx":cx,"smooth_cy":cy,"raw_cx":cx,"raw_cy":cy,
             "prev_cx":cx,"prev_cy":cy,"bbox":bb,"torso_h":th,
@@ -716,7 +636,6 @@ def cull():
     for k in dl:
         player_scores.pop(k,None); del trackers[k]
 
-# ======================== DETECTION ========================
 def detect_persons(frame):
     """Detect persons with NMS applied."""
     h,w=frame.shape[:2]; dets=[]
@@ -1001,13 +920,11 @@ while True:
 
         draw_boxes(frame); draw_header(frame); draw_status(frame,ge)
 
-    # ==================== GAME OVER CHECK ====================
     if state not in (STATE_IDLE,STATE_OVER) and ge>=GAME_TIME:
         survivors=len([k for k,v in trackers.items() if not v.get("eliminated")])
         audio.stop_bg(); audio.play_once(SOUNDS["gameover"])
         transition(STATE_OVER); pointer.reset()
 
-    # ==================== GAME OVER ====================
     if state==STATE_OVER:
         pointer.update(frame)
         if pointer.just_clicked:
@@ -1020,7 +937,6 @@ while True:
     draw_fps(frame,fps)
     cv2.imshow("Squid Game",frame)
 
-    # ==================== KEYBOARD ====================
     key=cv2.waitKey(1)&0xFF
     if key==ord('q'): break
     elif key==ord(' ') and state in (STATE_IDLE,STATE_OVER):
@@ -1038,7 +954,6 @@ while True:
     elif key==ord('3') and state==STATE_IDLE:
         apply_mode("training"); _shapes_line=None; _btn_init=False
 
-# ======================== CLEANUP ========================
 print("[INFO] Shutting down...")
 cap.release(); cv2.destroyAllWindows(); audio.stop_bg()
 if pose: pose.close()
